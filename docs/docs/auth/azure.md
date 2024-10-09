@@ -179,3 +179,153 @@ Here's a few more links to relevant documentation for reference:
 
 - [Overview of tokens in Azure Active Directory B2C](https://docs.microsoft.com/en-us/azure/active-directory-b2c/tokens-overview)
 - [Working with MSAL.js and Azure AD B2C](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/working-with-b2c.md)
+  
+--------------------------------------------- Pt-br ----------------------------------------------------------
+  sidebar_label: Azure
+Autenticação com Azure Active Directory
+Para começar, execute o comando de configuração:
+```bash
+yarn rw setup auth azure-active-directory
+```
+Isso instala todos os pacotes, escreve todos os arquivos e faz as modificações no código que você precisa. Para uma explicação detalhada sobre todas as mudanças no lado da API e da web que não são exclusivas do Azure, veja o documento principal deAutenticação [Authentication](../authentication.md). Por enquanto, vamos focar no lado do Azure.
+
+Siga os passos em [Single-page application: App registration](https://docs.microsoft.com/en-us/azure/active-directory/develop/scenario-spa-app-registration). Após registrar seu aplicativo, você será redirecionado para a seção “Visão geral”. Estamos particularmente interessados ​​em duas credenciais aqui: "ID do Aplicativo (cliente)" e "ID do Diretório (locatário)". Vá em frente e copie o "ID do Aplicativo (cliente)" para o seu arquivo como . No entanto, "ID do Diretório (locatário)" precisa de uma explicação adicional.Aplicação de página única : Registro de aplicativo.envAZURE_ACTIVE_DIRECTORY_CLIENT_ID
+
+O Azure tem uma opção chamada "Autoridade". É uma URL que especifica um diretório do qual a MSAL (Biblioteca de Autenticação da Microsoft) pode solicitar tokens. Você pode ler mais sobre issoaqui , mas para simplificar, você provavelmente vai querer https://login.microsoftonline.com/${tenantId}como sua Autoridade, onde tenantIdé o "ID do Diretório (locatário)".
+
+Depois de substituir o "ID do Diretório (locatário)" da sua aplicação na URL, adicione-o ao seu arquivo .envcomo AZURE_ACTIVE_DIRECTORY_AUTHORITY. Juntando tudo:
+```bash title=".env"
+AZURE_ACTIVE_DIRECTORY_CLIENT_ID="..."
+# Where `tenantId` is your app's "Directory (tenant) ID"
+AZURE_ACTIVE_DIRECTORY_AUTHORITY="https://login.microsoftonline.com/${tenantId}"
+```
+Agora, volte para [Single-page application: App registration](https://docs.microsoft.com/en-us/azure/active-directory/develop/scenario-spa-app-registration). 
+Não final, ele diz...Aplicação de página única : Registro de aplicativo
+
+Em seguida, configure o registro do aplicativo com um URI de redirecionamento para especificar para onde a plataforma de identidade da Microsoft deve redirecionar o cliente juntamente com quaisquer tokens de segurança. 
+Use os passos protegidos para a versão do MSAL.js que você está usando em sua aplicação:
+
+MSAL.js 2.0 com fluxo de código de autenticação (recomendado)
+MSAL.js 1.0 com fluxo implícito
+O Redwood usa , então siga os passos indicados. Quando ele pedir um URI de redirecionamento, insira e , e copie esses valores para o seu arquivo como e :MSAL .js 2.0 com fluxo de código de autenticaçãohttp://localhost:8910http: e //localhost:8910/login.envAZURE_ACTIVE_DIRECTORY_REDIRECT_URIAZURE_ACTIVE_DIRECTORY_LOGOUT_REDIRECT_URI
+
+:::dica Não pode adicionar vários URIs?
+
+Configure um, e então você poderá configurar outro.
+```bash title=".env"
+AZURE_ACTIVE_DIRECTORY_CLIENT_ID="..."
+# Where `tenantId` is your app's "Directory (tenant) ID"
+AZURE_ACTIVE_DIRECTORY_AUTHORITY="https://login.microsoftonline.com/${tenantId}"
+AZURE_ACTIVE_DIRECTORY_REDIRECT_URI="http://localhost:8910"
+AZURE_ACTIVE_DIRECTORY_LOGOUT_REDIRECT_URI="http://localhost:8910/login"
+```
+Isso é tudo para as variáveis .env. Não se esqueça de incluir-las no array includeEnvironmentVariablesno arquivo redwood.toml:
+```toml title="redwood.toml"
+[web]
+  # ...
+  includeEnvironmentVariables = [
+    "AZURE_ACTIVE_DIRECTORY_CLIENT_ID",
+    "AZURE_ACTIVE_DIRECTORY_AUTHORITY",
+    "AZURE_ACTIVE_DIRECTORY_REDIRECT_URI",
+    "AZURE_ACTIVE_DIRECTORY_LOGOUT_REDIRECT_URI",
+  ]
+```
+Agora vamos garantir que tudo funcione: se este é um projeto novo, gere uma página inicial. Lá, tentaremos fazer a inscrição estruturando signUpdo hook useAuth(importe-o de 'src/auth'). Também destruturaremos e exibiremos isAuthenticatedpara verificar se funcionou:
+
+```
+yarn rw g page home /
+```
+
+```tsx title="web/src/pages/HomePage.tsx"
+import { useAuth } from 'src/auth'
+
+const HomePage = () => {
+  const { isAuthenticated, signUp } = useAuth()
+
+  return (
+    <>
+      {/* MetaTags, h1, paragraphs, etc. */}
+
+      <p>{JSON.stringify({ isAuthenticated })}</p>
+      <button onClick={signUp}>Sign Up</button>
+    </>
+  )
+}
+```
+
+#Funções (Roles)
+Para adicionar funções expostas por meio da declaração `roles`, siga [Adicionar funções de aplicativo ao seu aplicativo e recebê-las no token](https://docs.microsoft.com/en-us/azure/active-directory/develop/howto-add-app-roles-in-azure-ad-apps).
+
+#Opções delogIn
+`options` em `logIn(options?)` é do tipo [RedirectRequest](https://azuread.github.io/microsoft-authentication-library-forjs/ref/types/_azure_msal_browser.RedirectRequest.html) e é um bom lugar para passar [escopos](https://docs.microsoft.com/en-us/graph/permissions-reference#user-permissions) opcionais para autorização.
+Por padrão, a MSAL define `escopos` como [/.default](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-permissions-and-consent#the-default-scope ) que é integrado para cada aplicativo que se refere à lista estática de permissões configuradas no registro do aplicativo. Além disso, a MSAL adicionará `openid` e `profile` a todas as solicitações. No exemplo abaixo, incluímos explicitamente `User.Read.All` no escopo de login.
+```jsx
+await logIn({
+  scopes: ['User.Read.All'], // becomes ['openid', 'profile', 'User.Read.All']
+})
+```
+
+Consulte [loginRedirect](https://azuread.github.io/microsoft-authentication-library-for-js/ref/classes/_azure_msal_browser.PublicClientApplication.html#loginRedirect), [PublicClientApplication](https://azuread.github. io/microsoft-authentication-library-for-js/ref/classes/_azure_msal_browser.PublicClientApplication.html) classe e [Comportamento de escopos](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob /msal-lts/lib/msal-core/docs/scopes.md#scopes-behavior) para obter mais documentação.
+
+## Opções `getToken`
+
+`options` em `getToken(options?)` é do tipo [RedirectRequest](https://azuread.github.io/microsoft-authentication-library-for-js/ref/types/_azure_msal_browser.RedirectRequest.html).
+Por padrão, `getToken` será chamado com escopo `['openid', 'profile']`.
+Como o Azure Active Directory aplica [consentimento incremental](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/resources-and-scopes.md# escopos dinâmicos e consentimento incremental), podemos estender as permissões do exemplo de login incluindo outro escopo, por exemplo `Mail.Read`:
+
+```js
+await getToken({
+  scopes: ['Mail.Read'], // becomes ['openid', 'profile', 'User.Read.All', 'Mail.Read']
+})
+```
+
+Consulte [acquireTokenSilent](https://azuread.github.io/microsoft-authentication-library-for-js/ref/classes/_azure_msal_browser.PublicClientApplication.html#acquireTokenSilent), [Recursos e escopos](https://github. com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/resources-and-scopes.md#resources-and-scopes) ou [documentação completa da classe](https:/ /pub.dev/documentation/msal_js/latest/msal_js/PublicClientApplication-class.html#constructors) para obter mais informações.
+
+## Configuração específica do Azure Active Directory B2C
+
+Você pode criar seu próprio fluxo de autenticação com o Azure Active Directory B2C usando [fluxos de usuário hospedados](https://docs.microsoft.com/en-us/azure/active-directory-b2c/add-sign-up-and-sign -in-policy?pivots=b2c-user-flow).
+Usá-lo requer duas configurações extras.
+
+#### Atualize o arquivo .env:
+
+```bash title=".env"
+AZURE_ACTIVE_DIRECTORY_AUTHORITY=https://{your-microsoft-tenant-name}.b2clogin.com/{{your-microsoft-tenant-name}}.onmicrosoft.com/{{your-microsoft-user-flow-id}}
+AZURE_ACTIVE_DIRECTORY_JWT_ISSUER=https://{{your-microsoft-tenant-name}}.b2clogin.com/{{your-microsoft-tenant-id}}/v2.0/
+AZURE_ACTIVE_DIRECTORY_KNOWN_AUTHORITY=https://{{your-microsoft-tenant-name}}.b2clogin.com
+```
+
+Aqui está um exemplo:
+
+```bash title=".env.example"
+AZURE_ACTIVE_DIRECTORY_AUTHORITY=https://rwauthtestb2c.b2clogin.com/rwauthtestb2c.onmicrosoft.com/B2C_1_signupsignin1
+AZURE_ACTIVE_DIRECTORY_JWT_ISSUER=https://rwauthtestb2c.b2clogin.com/775527ef-8a37-4307-8b3d-cc311f58d922/v2.0/
+AZURE_ACTIVE_DIRECTORY_KNOWN_AUTHORITY=https://rwauthtestb2c.b2clogin.com
+```
+
+E não se esqueça de adicionar `AZURE_ACTIVE_DIRECTORY_KNOWN_AUTHORITY` ao array `includeEnvironmentVariables` em `redwood.toml`.
+(`AZURE_ACTIVE_DIRECTORY_JWT_ISSUER` é usado apenas no lado da API. Mas o mais importante é que é sensível - _não_ inclua-o no lado da web.)
+
+#### Atualizar instância `activeDirectoryClient`
+
+Isto permite que o cliente do lado web da MSAL saiba sobre a nossa nova autoridade B2C:
+
+```jsx title="web/src/auth.{js,ts}"
+const azureActiveDirectoryClient = new PublicClientApplication({
+  auth: {
+    clientId: process.env.AZURE_ACTIVE_DIRECTORY_CLIENT_ID,
+    authority: process.env.AZURE_ACTIVE_DIRECTORY_AUTHORITY,
+    redirectUri: process.env.AZURE_ACTIVE_DIRECTORY_REDIRECT_URI,
+    postLogoutRedirectUri:
+      process.env.AZURE_ACTIVE_DIRECTORY_LOGOUT_REDIRECT_URI,
+    // highlight-next-line
+    knownAuthorities: [process.env.AZURE_ACTIVE_DIRECTORY_KNOWN_AUTHORITY],
+  },
+})
+```
+
+Agora você pode chamar as funções `logIn` e `logOut` de `useAuth()`, e tudo deve funcionar.
+
+Aqui estão mais alguns links para documentação relevante para referência:
+
+- [Visão geral dos tokens no Azure Active Directory B2C](https://docs.microsoft.com/en-us/azure/active-directory-b2c/tokens-overview)
+- [Trabalhando com MSAL.js e Azure AD B2C](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/working-with-b2c .md)
